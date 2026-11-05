@@ -52,6 +52,10 @@ The app requires the current manifest and will not start an expensive full audio
 validation during a participant session. Re-run the preparation command after
 changing the DEAM annotations or MP3 files.
 
+Study responses use the protocol templates under `study/data/`. With
+`PILOT_MODE = True`, the four files are isolated under `study/data/pilot/`;
+formal mode writes them directly under `study/data/`.
+
 Playlist checks that do not need the dataset:
 
 ```bash
