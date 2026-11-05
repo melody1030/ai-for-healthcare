@@ -39,12 +39,19 @@ the loader searches for these files:
 
 ## Usage
 
-All the work is in one notebook:
+The exploratory analysis remains in the notebook, while reusable data and playlist
+logic is importable from `src/`:
 [`notebooks/IsoHarmonix_data_and_planner.ipynb`](notebooks/IsoHarmonix_data_and_planner.ipynb)
 
 ```bash
 jupyter notebook notebooks/IsoHarmonix_data_and_planner.ipynb
 ```
+
+The reusable modules are:
+
+- `src/data.py`: DEAM annotation loading, audio discovery, and cleaning.
+- `src/planner.py`: mood paths, nearest-song retrieval, playlist/session construction,
+  and retrieval-distance summaries.
 
 Run all cells from top to bottom. The notebook also works in Google Colab: if
 `data/DEAM/` is not found, it tries to download DEAM with `kagglehub` (needs a Kaggle
