@@ -12,8 +12,8 @@ step closer to the target mood. We compare this **iso-guided** playlist with a
 | Weeks | Task | Owner | Status |
 |---|---|---|---|
 | 9/29 | Proposal | All | Done |
-| 10/6 to 10/20 | DEAM loading, cleaning, coverage plot | A | **Done** (`isoharmonix/data.py`, `isoharmonix/coverage.py`) |
-| 10/6 to 10/20 | Path planner + song retrieval | B | **Done** (`isoharmonix/planner.py`) |
+| 10/6 to 10/20 | DEAM loading, cleaning, coverage plot | A | **Done** (notebook Parts 1 to 3) |
+| 10/6 to 10/20 | Path planner + song retrieval | B | **Done** (notebook Parts 4 to 6) |
 | 10/13 to 10/27 | Simple app: sliders, playback, why-card | C | To do (the why-card text is ready, see below) |
 | 10/13 to 10/27 | Questionnaire + study protocol | D | To do |
 | 10/27 | Integration + pilot (checkpoint) | All | To do |
@@ -39,41 +39,29 @@ the loader searches for these files:
 
 ## Usage
 
-**1. Clean the data and make the coverage plot**
+All the work is in one notebook:
+[`notebooks/IsoHarmonix_data_and_planner.ipynb`](notebooks/IsoHarmonix_data_and_planner.ipynb)
 
 ```bash
-python scripts/prepare_data.py
+jupyter notebook notebooks/IsoHarmonix_data_and_planner.ipynb
 ```
 
-This writes `data/songs_clean.csv` plus `results/coverage_plot.png`,
-`results/coverage_grid.csv` and `results/data_report.txt`.
+Run all cells from top to bottom. The notebook also works in Google Colab: if
+`data/DEAM/` is not found, it tries to download DEAM with `kagglehub` (needs a Kaggle
+API token).
 
-**2. Build both playlists for one mood input**
+| Part | Content | Output |
+|---|---|---|
+| 0 | Setup and fixed rules | |
+| 1 to 2 | Load and clean DEAM | `data/songs_clean.csv` |
+| 3 | Coverage plot and gap table | `results/coverage_plot.png`, `results/coverage_grid.csv` |
+| 4 to 5 | Path planner and song retrieval | `results/example_session.csv`, `results/example_paths.png` |
+| 6 | Checks on a toy song set | |
+| 7 to 8 | Match quality and points for the team | |
 
-```bash
-python scripts/make_playlist.py --current 3 7 --target 7 3 --plot results/example_paths.png
-```
-
-`--current` and `--target` are `valence arousal` on the 1 to 9 slider scale.
-
-**3. Use it from the app (for Tiffany)**
-
-```python
-from isoharmonix import Mood, SongRetriever, build_session
-from isoharmonix.data import read_clean_csv
-
-retriever = SongRetriever(read_clean_csv("data/songs_clean.csv"))  # build once
-session = build_session(retriever, Mood(3, 7), Mood(7, 3))
-# one row per song: condition ("iso"/"direct"), step, target_valence,
-# target_arousal, song_id, song_valence, song_arousal, distance,
-# gap_warning, audio_path, why  (the why-card text)
-```
-
-**Tests**
-
-```bash
-python -m pytest
-```
+**For the app (Tiffany):** `build_session(retriever, Mood(3, 7), Mood(7, 3))` returns
+one row per song with `condition` ("iso"/"direct"), `step`, the step's target, the
+song's DEAM ratings, `distance`, `gap_warning`, `audio_path` and `why` (the why-card text).
 
 ## How it works
 
@@ -87,7 +75,7 @@ python -m pytest
    *"Song 2 of 5. Target for this step: valence 4.0, arousal 6.0. This song is rated valence 4.0, arousal 5.9 by DEAM listeners. It was the closest unused song to the target (distance 0.10)."*
 
 All fixed rules (5 steps, Euclidean distance, spread cutoff, gap warning) are in
-`isoharmonix/config.py`. They should be frozen before the pilot.
+the "Fixed rules" cell in Part 0 of the notebook. They should be frozen before the pilot.
 
 ## Data cleaning rules
 
@@ -99,7 +87,7 @@ All fixed rules (5 steps, Euclidean distance, spread cutoff, gap warning) are in
 
 ## First results (DEAM ratings only, before adding audio)
 
-From `results/data_report.txt`:
+From the notebook:
 
 - 1,802 raw songs, 179 dropped for high rater spread (spread > 1.885), **1,623 clean songs**.
 - Median gap from an integer slider setting to the closest song: 0.63. Only **64%** of the 81 slider settings have a song within 1.0.
