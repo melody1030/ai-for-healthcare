@@ -1,0 +1,4 @@
+participant_id,order,playlist_A_condition,playlist_B_condition
+PILOT1,iso_first,iso,direct
+PILOT2,direct_first,direct,iso
+PILOT3,iso_first,iso,direct

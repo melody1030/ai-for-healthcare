@@ -1,10 +1,16 @@
 # DEAM data is downloaded locally (see README), never committed
 data/
-results/pilot_responses.csv
-results/study_responses.csv
-.DS_Store
+*.mp3
+*.wav
+*.aiff
+*.m4a
+# Real study data stays in the team's private folder, never in the repo
+study/data/
 __pycache__/
 *.pyc
 .pytest_cache/
 .venv/
+results/pilot_responses.csv
+results/study_responses.csv
+.DS_Store
 venv/
