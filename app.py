@@ -87,7 +87,7 @@ def render_progress(stage: str) -> None:
         "setup": "Setup",
         "playlist_a": "Playlist A",
         "ratings_a": "Feedback",
-        "reset": "Reset",
+        "reset": "Break",
         "playlist_b": "Playlist B",
         "ratings_b": "Final",
     }
