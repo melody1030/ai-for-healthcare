@@ -10,3 +10,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .venv/
+results/pilot_responses.csv
+results/study_responses.csv
+.DS_Store
+venv/

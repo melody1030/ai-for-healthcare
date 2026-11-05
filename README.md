@@ -37,6 +37,24 @@ The exact folder layout inside does not matter: the loader searches for these fi
 
 `data/` and audio files are in `.gitignore`, so the dataset is never committed.
 Nothing in the code hardcodes a machine-specific path, and the library does not download DEAM.
+The Streamlit app stores validated audio metadata in an ignored manifest under
+`data/` and invalidates it when the local annotations, audio files, or decoder
+change.
+
+Before launching the participant app, prepare and validate the audio once:
+
+```bash
+python scripts/prepare_study_data.py
+streamlit run app.py
+```
+
+The app requires the current manifest and will not start an expensive full audio
+validation during a participant session. Re-run the preparation command after
+changing the DEAM annotations or MP3 files.
+
+Study responses use the protocol templates under `study/data/`. With
+`PILOT_MODE = True`, the four files are isolated under `study/data/pilot/`;
+formal mode writes them directly under `study/data/`.
 
 Playlist checks that do not need the dataset:
 
