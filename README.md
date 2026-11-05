@@ -53,6 +53,20 @@ The reusable modules are:
 - `src/planner.py`: mood paths, nearest-song retrieval, playlist/session construction,
   and retrieval-distance summaries.
 
+### Streamlit pilot app
+
+After installing the requirements and placing DEAM under `data/DEAM/`, start the
+minimal within-subject study app from the repository root:
+
+```bash
+streamlit run app.py
+```
+
+The app counterbalances condition order by participant ID, presents only Playlist A
+and Playlist B, plays five local DEAM clips per playlist, collects mood and experience
+ratings, and appends analysis-ready rows to `results/study_responses.csv`. It uses
+only target moods whose nearest clean DEAM song is within distance 1.0.
+
 Run all cells from top to bottom. The notebook also works in Google Colab: if
 `data/DEAM/` is not found, it tries to download DEAM with `kagglehub` (needs a Kaggle
 API token).

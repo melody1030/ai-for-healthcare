@@ -83,6 +83,33 @@ def nearest_gap(songs: pd.DataFrame, points: np.ndarray) -> np.ndarray:
     return distances[:, 0]
 
 
+def target_is_supported(
+    retriever: SongRetriever,
+    target: Mood,
+    max_distance: float = GAP_WARNING,
+) -> bool:
+    """Return whether six distinct songs are within ``max_distance`` of a target."""
+    distances, _ = retriever.nn.kneighbors(
+        target.as_array()[None, :],
+        n_neighbors=min(6, len(retriever.songs)),
+    )
+    return len(retriever.songs) >= 6 and float(distances[0, 5]) <= max_distance
+
+
+def supported_integer_targets(
+    retriever: SongRetriever,
+    max_distance: float = GAP_WARNING,
+) -> tuple[tuple[int, int], ...]:
+    """Return supported integer valence-arousal targets on the 1–9 grid."""
+    targets = []
+    for valence in range(int(SCALE_MIN), int(SCALE_MAX) + 1):
+        for arousal in range(int(SCALE_MIN), int(SCALE_MAX) + 1):
+            target = Mood(valence, arousal)
+            if target_is_supported(retriever, target, max_distance):
+                targets.append((valence, arousal))
+    return tuple(targets)
+
+
 def why_text(row: dict) -> str:
     """Create the explainability text shown for a selected song."""
     text = (

@@ -1,6 +1,10 @@
 # DEAM data is downloaded locally (see README), never committed
 data/
+results/pilot_responses.csv
+results/study_responses.csv
+.DS_Store
 __pycache__/
 *.pyc
 .pytest_cache/
 .venv/
+venv/
