@@ -87,7 +87,7 @@ def render_progress(stage: str) -> None:
         "setup": "Setup",
         "playlist_a": "Playlist A",
         "ratings_a": "Feedback",
-        "reset": "Break",
+        "break": "Break",
         "playlist_b": "Playlist B",
         "ratings_b": "Final",
     }
@@ -96,7 +96,7 @@ def render_progress(stage: str) -> None:
         "setup": 0,
         "playlist": 1 if st.session_state.get("playlist_index", 0) == 0 else 4,
         "ratings": 2 if st.session_state.get("playlist_index", 0) == 0 else 5,
-        "second_pre": 3,
+        "second_pre": 4,
         "final": 5,
         "complete": 5,
     }.get(stage, 0)
