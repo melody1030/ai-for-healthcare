@@ -13,7 +13,6 @@ from isoharmonix.data import (  # noqa: E402
     clean_songs,
     load_annotations,
     resolve_deam_dir,
-    scan_audio,
 )
 from isoharmonix.planner import Mood, SongRetriever, build_session  # noqa: E402
 from isoharmonix.rules import (  # noqa: E402
@@ -21,6 +20,7 @@ from isoharmonix.rules import (  # noqa: E402
     DIRECT,
     ISO,
 )
+from isoharmonix.study_data import PreparedAudioError, load_prepared_audio  # noqa: E402
 
 
 PILOT_MODE = True
@@ -99,12 +99,12 @@ def render_progress(stage: str) -> None:
     )
 
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def load_study_songs() -> pd.DataFrame:
     """Load cleaned DEAM songs with local audio paths for the study."""
     data_dir = resolve_deam_dir(ROOT)
     raw_songs = load_annotations(data_dir)
-    audio = scan_audio(data_dir)
+    audio = load_prepared_audio(ROOT, data_dir)
     songs, _ = clean_songs(
         raw_songs,
         audio.playable,
@@ -116,13 +116,13 @@ def load_study_songs() -> pd.DataFrame:
     return songs
 
 
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def load_retriever(songs: pd.DataFrame) -> SongRetriever:
     """Build the nearest-song retriever once for the app process."""
     return SongRetriever(songs)
 
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def supported_targets(songs: pd.DataFrame) -> tuple[tuple[int, int], ...]:
     """Return integer target moods with six songs within the gap threshold."""
     retriever = load_retriever(songs)
@@ -422,12 +422,25 @@ def main() -> None:
         "research pilot and is not medical treatment."
     )
 
+    preparing = st.empty()
+    preparing.info("Preparing the study...")
     try:
         songs = load_study_songs()
         retriever = load_retriever(songs)
-    except (FileNotFoundError, ValueError, KeyError) as error:
-        st.error(f"Could not load the local DEAM study data: {error}")
+    except (FileNotFoundError, ValueError, KeyError, PreparedAudioError) as error:
+        preparing.empty()
+        if not st.session_state.get("started"):
+            if isinstance(error, PreparedAudioError):
+                st.error(
+                    "Study audio has not been prepared yet. Run:\n\n"
+                    "`python scripts/prepare_study_data.py`"
+                )
+            else:
+                st.error(f"Could not load the local DEAM study data: {error}")
+        else:
+            st.error("Study data is unavailable. Please contact the researcher.")
         return
+    preparing.empty()
 
     if not st.session_state.get("started"):
         render_progress("setup")
