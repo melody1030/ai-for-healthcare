@@ -2,23 +2,24 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
-import sys
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT))
 
-from src.data import clean_songs, find_audio, load_annotations  # noqa: E402
-from src.planner import (  # noqa: E402
+from isoharmonix.data import (  # noqa: E402
+    clean_songs,
+    load_annotations,
+    resolve_deam_dir,
+    scan_audio,
+)
+from isoharmonix.planner import Mood, SongRetriever, build_session  # noqa: E402
+from isoharmonix.rules import (  # noqa: E402
     GAP_WARNING,
     DIRECT,
     ISO,
-    Mood,
-    SongRetriever,
-    build_session,
-    supported_integer_targets,
 )
 
 
@@ -101,10 +102,15 @@ def render_progress(stage: str) -> None:
 @st.cache_data
 def load_study_songs() -> pd.DataFrame:
     """Load cleaned DEAM songs with local audio paths for the study."""
-    data_dir = ROOT / "data" / "DEAM"
+    data_dir = resolve_deam_dir(ROOT)
     raw_songs = load_annotations(data_dir)
-    audio = find_audio(data_dir)
-    songs, _ = clean_songs(raw_songs, audio)
+    audio = scan_audio(data_dir)
+    songs, _ = clean_songs(
+        raw_songs,
+        audio.playable,
+        require_audio=audio.files_found > 0,
+        unreadable_ids=audio.unreadable_ids,
+    )
     if songs.empty:
         raise ValueError("No usable DEAM songs were found after cleaning.")
     return songs
@@ -119,7 +125,15 @@ def load_retriever(songs: pd.DataFrame) -> SongRetriever:
 @st.cache_data
 def supported_targets(songs: pd.DataFrame) -> tuple[tuple[int, int], ...]:
     """Return integer target moods with six songs within the gap threshold."""
-    return supported_integer_targets(load_retriever(songs), GAP_WARNING)
+    retriever = load_retriever(songs)
+    targets = []
+    for valence in range(1, 10):
+        for arousal in range(1, 10):
+            point = np.array([valence, arousal], dtype=float)
+            distances = np.linalg.norm(retriever.coords - point, axis=1)
+            if len(distances) >= 6 and np.partition(distances, 5)[5] <= GAP_WARNING:
+                targets.append((valence, arousal))
+    return tuple(targets)
 
 
 def describe_target(target: tuple[int, int]) -> str:
@@ -386,7 +400,12 @@ def render_start(songs: pd.DataFrame, retriever: SongRetriever) -> None:
     elif submitted:
         current = Mood(current_valence, current_arousal)
         target_mood = Mood(*target)
-        session = build_session(retriever, current, target_mood)
+        session = build_session(
+            retriever,
+            current,
+            target_mood,
+            allocation="joint",
+        )
         initialize_state(int(participant_id), current, target_mood, session)
         st.session_state["stage"] = "playlist"
         st.rerun()
