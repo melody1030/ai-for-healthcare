@@ -96,6 +96,7 @@ def render_progress(stage: str) -> None:
         "setup": 0,
         "playlist": 1 if st.session_state.get("playlist_index", 0) == 0 else 4,
         "ratings": 2 if st.session_state.get("playlist_index", 0) == 0 else 5,
+        "break": 3,
         "second_pre": 4,
         "final": 5,
         "complete": 5,
@@ -130,7 +131,7 @@ def load_study_songs() -> pd.DataFrame:
 @st.cache_resource(show_spinner=False)
 def load_retriever(songs: pd.DataFrame) -> SongRetriever:
     """Build the nearest-song retriever once for the app process."""
-    return SongRetriever(songs)
+    return SongRetriever(songs, check_audio=False)
 
 
 @st.cache_data(show_spinner=False)
