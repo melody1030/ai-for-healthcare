@@ -1,5 +1,9 @@
 # DEAM data is downloaded locally (see README), never committed
 data/
+*.mp3
+*.wav
+*.aiff
+*.m4a
 # Real study data stays in the team's private folder, never in the repo
 study/data/
 __pycache__/
