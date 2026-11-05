@@ -70,7 +70,7 @@ song's DEAM ratings, `distance`, `gap_warning`, `audio_path` and `why` (the why-
    - *Iso-guided:* 5 evenly spaced points from the current mood to the target. Song 1 matches, song 5 reaches the target.
    - *Direct-to-target:* all 5 points at the target.
 3. **Song retrieval:** for each point, the closest unused DEAM song by Euclidean distance (scikit-learn `NearestNeighbors`).
-   In one session, no song appears in both playlists. The iso playlist is built first, then the direct playlist uses the songs that are left.
+   Six nearest target-region songs are reserved first: one is assigned to the Iso endpoint and five to Direct. Iso's intermediate steps exclude all six reserved songs, so no song repeats within or across playlists.
 4. **Why-card:** each song comes with a sentence like
    *"Song 2 of 5. Target for this step: valence 4.0, arousal 6.0. This song is rated valence 4.0, arousal 5.9 by DEAM listeners. It was the closest unused song to the target (distance 0.10)."*
 
@@ -101,11 +101,10 @@ Example session, current mood (3, 7) "tense", target (7, 3) "calm and content":
 
 ## Points for the team to decide before the pilot
 
-1. **Match quality differs between conditions.** The direct playlist needs 5 songs
-   at the same point, so its songs are further from their target. Over 300 random
-   mood pairs, the mean distance was **0.57 for iso and 1.10 for direct**. This could
-   be a confound, so we should report `match_quality()` for every participant, and
-   maybe restrict study targets to well-covered areas.
+1. **Match quality still needs to be measured after reserved allocation.** Six
+   target-region songs are reserved before either playlist is built, with one assigned
+   to the Iso endpoint and five to Direct. We should report `match_quality()` for every
+   participant and still restrict or warn on poorly covered target regions.
 2. **Slider limits.** Because the corners have no songs, we could limit the sliders
    (for example to 2 to 8), or show the gap warning in the app.
 3. **Spread cutoff.** 90th percentile is our current choice. Please confirm before we freeze it.
