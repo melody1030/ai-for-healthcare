@@ -1,0 +1,6 @@
+# DEAM data is downloaded locally (see README), never committed
+data/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/

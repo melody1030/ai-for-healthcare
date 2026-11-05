@@ -1,0 +1,20 @@
+== Cleaning ==
+Raw songs:                    1802
+Dropped, missing rating:      0
+Dropped, rating out of 1-9:   0
+Dropped, missing audio file:  0
+Dropped, high rater spread:   179  (spread > 1.885)
+Clean songs:                  1623
+Note: No MP3 files found; audio check skipped.
+
+== Coverage (integer slider grid) ==
+Grid points: 81
+Median gap to closest song: 0.63
+Max gap: 3.07
+Points within 1.0 of a song: 64.2%
+Worst-covered targets (valence, arousal -> gap):
+  (1, 9) -> 3.07
+  (9, 1) -> 2.75
+  (2, 9) -> 2.47
+  (1, 8) -> 2.44
+  (3, 9) -> 2.06
