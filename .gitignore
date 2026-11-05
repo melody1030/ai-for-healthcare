@@ -1,5 +1,9 @@
 # DEAM data is downloaded locally (see README), never committed
 data/
+*.mp3
+*.wav
+*.aiff
+*.m4a
 __pycache__/
 *.pyc
 .pytest_cache/
