@@ -101,11 +101,68 @@ Example session, current mood (3, 7) "tense", target (7, 3) "calm and content":
 
 ## Points for the team to decide before the pilot
 
-1. **Match quality differs between conditions.** The direct playlist needs 5 songs
-   at the same point, so its songs are further from their target. Over 300 random
-   mood pairs, the mean distance was **0.57 for iso and 1.10 for direct**. This could
-   be a confound, so we should report `match_quality()` for every participant, and
-   maybe restrict study targets to well-covered areas.
-2. **Slider limits.** Because the corners have no songs, we could limit the sliders
-   (for example to 2 to 8), or show the gap warning in the app.
-3. **Spread cutoff.** 90th percentile is our current choice. Please confirm before we freeze it.
+Our proposal says all rules are **fixed before the study**. If we change them after
+seeing the results, people could say we chose the rules that gave a nice answer. So we
+need to agree on these points once, write them in the notebook's "Fixed rules" cell, and
+not change them after the pilot.
+
+**Two basic ideas first**
+- **Every song is a dot on a 9 × 9 map:** valence (1 = sad, 9 = happy) and arousal
+  (1 = calm, 9 = excited). The user's mood is also a dot on this map.
+- **Distance = how good the match is.** The system picks the closest song to each
+  target point. Small distance = good match. Big distance = poor match.
+
+### 1. The two playlists do not match equally well
+
+- **Iso:** the 5 songs aim at 5 *different* points, so each one gets the closest song.
+- **Direct:** all 5 songs aim at the *same* point and no song can repeat, so it gets the
+  1st to 5th closest songs. The later ones are further away.
+- Example, tense (3, 7) to calm (7, 3): mean distance **0.15 for iso, 0.57 for direct**.
+  Over 300 random moods: **0.57 vs 1.10**.
+
+**Why it matters:** if iso works better, someone could say "the iso songs were just
+chosen more accurately". This second explanation is a **confound**.
+
+**Proposal:** we cannot fully remove it (it comes from the design), so we (1) save the
+match distance for every participant, (2) run the main test again without participants
+whose direct playlist has a mean distance above 1.0, and (3) report it as a limitation.
+
+### 2. Some moods have almost no songs
+
+Most songs lie on a diagonal from "sad and calm" to "happy and excited". Two corners are
+almost empty: (1, 9) very sad and tense (closest song 3.07 away) and (9, 1) very happy
+and calm (2.75 away).
+
+| Slider range | Moods with a song within 1.0 | Mean distance, iso | Mean distance, direct |
+|---|---|---|---|
+| 1 to 9 (now) | 64% | 0.57 | 1.10 |
+| **2 to 8** | **90%** | **0.24** | **0.55** |
+| 3 to 7 | 100% | 0.09 | 0.23 |
+
+**Proposal:** sliders from 2 to 8 in the app. It makes both playlists match much better
+and also shrinks the gap in point 1. 3 to 7 is too narrow: a very stressed person could
+not report how they really feel. (The questionnaire keeps the full 1 to 9 scale.)
+
+### 3. Which songs to remove because raters disagreed
+
+Each DEAM song was rated by several people. When they disagree a lot, we are not sure
+where the song belongs on the map. Our rule removes the 10% of songs with the most
+disagreement (90th percentile cutoff).
+
+| Rule | Songs left | Moods with a song within 1.0 |
+|---|---|---|
+| Remove 20% | 1,441 | 64% |
+| **Remove 10% (now)** | **1,623** | **64%** |
+| Remove 5% | 1,711 | 65% |
+| Remove none | 1,802 | 67% |
+
+**Proposal:** keep "remove 10%". The numbers hardly change, so this choice is low risk.
+
+### Questions for the team
+
+1. Sliders from 2 to 8: yes or no?
+2. Save match distance and re-run the test without poorly matched participants: yes or no?
+3. Keep removing the 10% of songs with the most rater disagreement: yes or no?
+
+Three more decisions about the study session (break length, hiding the why-card, moods
+very close to the target) are in [Section 11 of the study protocol](docs/study_protocol.md#11-decisions-to-confirm-before-the-pilot).
