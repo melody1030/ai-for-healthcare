@@ -15,7 +15,7 @@ step closer to the target mood. We compare this **iso-guided** playlist with a
 | 10/6 to 10/20 | DEAM loading, cleaning, coverage plot | A | **Done** (notebook Parts 1 to 3) |
 | 10/6 to 10/20 | Path planner + song retrieval | B | **Done** (notebook Parts 4 to 6) |
 | 10/13 to 10/27 | Simple app: sliders, playback, why-card | C | To do (the why-card text is ready, see below) |
-| 10/13 to 10/27 | Questionnaire + study protocol | D | To do |
+| 10/13 to 10/27 | Questionnaire + study protocol | D | **Draft ready for team review** ([protocol](docs/study_protocol.md), [questionnaire](docs/questionnaire.md), [counterbalancing](study/counterbalancing.csv)) |
 | 10/27 | Integration + pilot (checkpoint) | All | To do |
 | 11/3 to 11/17 | User study sessions | C, D | To do |
 | 11/17 to 12/1 | Analysis, explainability, bias | A, B | To do |
