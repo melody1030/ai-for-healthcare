@@ -17,7 +17,12 @@ from isoharmonix.data import (  # noqa: E402
     load_annotations,
     resolve_deam_dir,
 )
-from isoharmonix.planner import Mood, SongRetriever, build_session  # noqa: E402
+from isoharmonix.planner import (  # noqa: E402
+    SESSION_COLUMNS,
+    Mood,
+    SongRetriever,
+    build_session,
+)
 from isoharmonix.rules import (  # noqa: E402
     GAP_WARNING,
     DIRECT,
@@ -37,6 +42,43 @@ OUTPUT_FILES = {
     "ratings": OUTPUT_DIR / "ratings.csv",
     "songs_played": OUTPUT_DIR / "songs_played.csv",
     "session_log": OUTPUT_DIR / "session_log.csv",
+}
+SESSION_LOG_COLUMNS = [
+    "participant_id", "session_date", "researcher", "start_time",
+    "end_time", "app_problems", "notes",
+]
+CONSENT_TEXT = """**IsoHarmonix: music and everyday mood**
+
+We are students in the AI for Healthcare course at Cornell Tech. We are testing
+two ways of ordering songs in a playlist, to see how they affect everyday mood.
+
+**What you will do.** You will listen to two short playlists (about 4 minutes each)
+through headphones and answer short questions about your mood before and after each
+one. The session takes about 30 minutes.
+
+**Risks.** The risks are very low. The songs are ordinary music clips. If anything
+makes you uncomfortable, you can stop at any time.
+
+**This is not treatment.** This study does not diagnose or treat any health condition.
+
+**Your data.** We do not record your name with your answers. We use a participant
+number instead. Only the project team can see the data, and we only report combined,
+anonymous results. You can ask us to delete your data until 17 November 2026.
+
+**Your choice.** Taking part is voluntary. You can skip any question or stop at any
+time, with no problem at all.
+
+"""
+MOOD_ANCHORS = (
+    "Pleasant: 1 = very unhappy, sad; 5 = neutral; 9 = very happy, pleased",
+    "Energy: 1 = very calm, relaxed, sleepy; 5 = neutral; "
+    "9 = very excited, alert, tense",
+)
+MOOD_LABELS = {
+    "target_pleasant": "Pleasant feeling you would like",
+    "target_energy": "Energy you would like",
+    "current_pleasant": "How pleasant do you feel?",
+    "current_energy": "How much energy do you feel?",
 }
 
 
@@ -152,30 +194,30 @@ def describe_target(target: tuple[int, int]) -> str:
     """Return a participant-friendly label while preserving the numeric target."""
     valence, arousal = target
     valence_words = {
-        1: "very negative",
-        2: "negative",
-        3: "somewhat negative",
-        4: "slightly negative",
+        1: "very unhappy, sad",
+        2: "unhappy",
+        3: "somewhat unhappy",
+        4: "slightly unhappy",
         5: "neutral",
-        6: "slightly positive",
-        7: "somewhat positive",
-        8: "positive",
-        9: "very positive",
+        6: "slightly happy",
+        7: "somewhat happy",
+        8: "happy",
+        9: "very happy, pleased",
     }
     arousal_words = {
-        1: "very calm / low energy",
-        2: "calm / low energy",
+        1: "very calm, relaxed, sleepy",
+        2: "calm, relaxed",
         3: "somewhat calm",
         4: "slightly calm",
-        5: "moderate energy",
-        6: "slightly excited",
-        7: "somewhat excited",
-        8: "excited / high energy",
-        9: "very excited / high energy",
+        5: "neutral energy",
+        6: "slightly energized",
+        7: "somewhat energized",
+        8: "energized",
+        9: "very excited, alert, tense",
     }
     return (
-        f"{valence_words[valence]}, {arousal_words[arousal]} "
-        f"(valence {valence}, arousal {arousal})"
+        f"{MOOD_LABELS['target_pleasant']}: {valence_words[valence]}; "
+        f"{MOOD_LABELS['target_energy']}: {arousal_words[arousal]}"
     )
 
 
@@ -213,6 +255,10 @@ def initialize_state(
             "responses": {},
             "second_pre": None,
             "break_started_at": None,
+            "skipped_clips": [],
+            "last_completed_step": None,
+            "resume_count": 0,
+            "app_problems": [],
             "saved": False,
         }
     )
@@ -225,6 +271,134 @@ def reset_study() -> None:
     st.rerun()
 
 
+def checkpoint_directory() -> Path:
+    """Return the pilot or formal checkpoint directory without changing output mode."""
+    mode_dir = STUDY_DATA_DIR / "pilot" if PILOT_MODE else STUDY_DATA_DIR
+    return mode_dir / "checkpoints"
+
+
+def checkpoint_path(participant_id: str) -> Path:
+    if not participant_id or Path(participant_id).name != participant_id:
+        raise ValueError("Invalid participant ID for checkpoint path.")
+    return checkpoint_directory() / f"{participant_id}.json"
+
+
+def checkpoint_payload(state: dict) -> dict:
+    """Serialize the exact generated playlists and all state needed to resume."""
+    return {
+        "participant_id": state["participant_id"],
+        "assignment": state["assignment"],
+        "background": state["background"],
+        "age_18_plus": state["age_18_plus"],
+        "consent": state["consent"],
+        "initial_current": [state["initial_current"].valence, state["initial_current"].arousal],
+        "target": [state["target"].valence, state["target"].arousal],
+        "condition_order": list(state["condition_order"]),
+        "playlists": {
+            condition: state["playlists"][condition].to_dict(orient="records")
+            for condition in (ISO, DIRECT)
+        },
+        "playlist_index": int(state["playlist_index"]),
+        "song_index": int(state["song_index"]),
+        "responses": state["responses"],
+        "second_pre": state["second_pre"],
+        "break_started_at": state["break_started_at"],
+        "started_at": state["started_at"],
+        "stage": state["stage"],
+        "last_completed_step": state.get("last_completed_step"),
+        "skipped_clips": state.get("skipped_clips", []),
+        "resume_count": int(state.get("resume_count", 0)),
+        "app_problems": state.get("app_problems", []),
+    }
+
+
+def _json_safe(value):
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, np.generic):
+        value = value.item()
+    if value is None or value is pd.NA:
+        return None
+    if isinstance(value, float) and np.isnan(value):
+        return None
+    return value
+
+
+def state_from_checkpoint(payload: dict) -> dict:
+    """Rehydrate saved playlists and progress without running retrieval again."""
+    playlists = {
+        condition: pd.DataFrame.from_records(
+            payload["playlists"][condition], columns=SESSION_COLUMNS
+        )
+        for condition in (ISO, DIRECT)
+    }
+    return {
+        "started": True,
+        "eligible": True,
+        "participant_id": payload["participant_id"],
+        "assignment": payload["assignment"],
+        "background": payload["background"],
+        "age_18_plus": payload["age_18_plus"],
+        "consent": payload["consent"],
+        "initial_current": Mood(*payload["initial_current"]),
+        "target": Mood(*payload["target"]),
+        "condition_order": payload["condition_order"],
+        "playlists": playlists,
+        "playlist_index": int(payload["playlist_index"]),
+        "song_index": int(payload["song_index"]),
+        "responses": payload["responses"],
+        "second_pre": payload["second_pre"],
+        "break_started_at": payload["break_started_at"],
+        "started_at": payload["started_at"],
+        "stage": payload["stage"],
+        "last_completed_step": payload.get("last_completed_step"),
+        "skipped_clips": payload.get("skipped_clips", []),
+        "resume_count": int(payload.get("resume_count", 0)),
+        "app_problems": payload.get("app_problems", []),
+        "saved": False,
+    }
+
+
+def read_checkpoint(participant_id: str) -> dict | None:
+    path = checkpoint_path(participant_id)
+    if not path.is_file():
+        return None
+    with path.open(encoding="utf-8") as checkpoint_file:
+        return json.load(checkpoint_file)
+
+
+def resume_checkpoint(payload: dict, state: dict | None = None) -> None:
+    state = st.session_state if state is None else state
+    state.update(state_from_checkpoint(payload))
+    state["resume_count"] += 1
+    state.pop("resume_prompt", None)
+    persist_checkpoint(state)
+
+
+def persist_checkpoint(state: dict | None = None) -> None:
+    state = st.session_state if state is None else state
+    path = checkpoint_path(state["participant_id"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", dir=path.parent, delete=False, encoding="utf-8"
+    ) as temporary:
+        json.dump(
+            _json_safe(checkpoint_payload(state)),
+            temporary,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        temporary_path = Path(temporary.name)
+    os.replace(temporary_path, path)
+    update_session_log(state)
+
+
+def delete_checkpoint(participant_id: str) -> None:
+    checkpoint_path(participant_id).unlink(missing_ok=True)
+
+
 def participant_id_is_completed(participant_id: str) -> bool:
     """Return whether the participant already has a saved protocol record."""
     path = OUTPUT_FILES["participants"]
@@ -234,10 +408,45 @@ def participant_id_is_completed(participant_id: str) -> bool:
     return participant_id in set(responses["participant_id"].dropna())
 
 
+def advance_current_clip(state: dict, skip_reason: str | None = None) -> None:
+    """Advance the existing playlist cursor, optionally recording a skipped clip."""
+    playlist_index = state["playlist_index"]
+    condition = state["condition_order"][playlist_index]
+    playlist_label = "A" if playlist_index == 0 else "B"
+    row = state["playlists"][condition].iloc[state["song_index"]]
+    timestamp = datetime.now(timezone.utc).isoformat()
+    completed = {
+        "playlist": playlist_label,
+        "condition": condition,
+        "step": int(row["step"]),
+        "song_id": int(row["song_id"]),
+        "timestamp": timestamp,
+    }
+    state["last_completed_step"] = completed
+    if skip_reason is not None:
+        skipped = {**completed, "reason": skip_reason}
+        state.setdefault("skipped_clips", []).append(skipped)
+        state.setdefault("app_problems", []).append(
+            f"Skipped Playlist {playlist_label} ({condition}) step {row['step']} "
+            f"song {row['song_id']}: {skip_reason}"
+        )
+    if state["song_index"] + 1 < len(state["playlists"][condition]):
+        state["song_index"] += 1
+    else:
+        state["stage"] = "ratings"
+
+
+def _advance_and_persist(skip_reason: str | None = None) -> None:
+    advance_current_clip(st.session_state, skip_reason)
+    persist_checkpoint()
+    st.rerun()
+
+
 def render_playlist() -> None:
     """Render one condition's five clips sequentially."""
-    condition = st.session_state["condition_order"][st.session_state["playlist_index"]]
-    playlist_label = "A" if st.session_state["playlist_index"] == 0 else "B"
+    playlist_index = st.session_state["playlist_index"]
+    condition = st.session_state["condition_order"][playlist_index]
+    playlist_label = "A" if playlist_index == 0 else "B"
     playlist = st.session_state["playlists"][condition]
     song_index = st.session_state["song_index"]
     row = playlist.iloc[song_index]
@@ -245,22 +454,35 @@ def render_playlist() -> None:
     st.header(f"Playlist {playlist_label}")
     st.caption(f"Clip {song_index + 1} of 5")
     st.progress((song_index + 1) / 5)
+    audio_path = row["audio_path"]
+    audio_available = (
+        isinstance(audio_path, (str, os.PathLike))
+        and bool(os.fspath(audio_path).strip())
+        and Path(audio_path).is_file()
+    )
     with st.container(border=True):
-        audio_path = row["audio_path"]
-        if not audio_path or not Path(audio_path).is_file():
-            st.error("This clip is not available locally. Please contact the study administrator.")
-            return
-        st.audio(audio_path, format="audio/mp3")
+        if audio_available:
+            st.audio(audio_path, format="audio/mp3")
+        else:
+            st.error("This clip is not available locally.")
+
+    if not audio_available:
+        if st.button("Skip this clip →", type="primary", key=f"skip_missing_{playlist_index}_{song_index}"):
+            _advance_and_persist("missing_file")
+        return
 
     if st.button(
         "I finished this clip →" if song_index < 4 else "I finished this playlist →",
         type="primary",
+        key=f"finish_clip_{playlist_index}_{song_index}",
     ):
-        if song_index < 4:
-            st.session_state["song_index"] += 1
-        else:
-            st.session_state["stage"] = "ratings"
-        st.rerun()
+        _advance_and_persist()
+    if st.button(
+        "Audio not working? Skip this clip",
+        type="secondary",
+        key=f"skip_audio_{playlist_index}_{song_index}",
+    ):
+        _advance_and_persist("participant_reported_audio_issue")
 
 
 def render_playlist_ratings() -> None:
@@ -270,11 +492,11 @@ def render_playlist_ratings() -> None:
     playlist_label = "A" if playlist_index == 0 else "B"
 
     st.header(f"After Playlist {playlist_label}")
-    st.caption("Valence: 1 = very negative, 9 = very positive")
-    st.caption("Arousal: 1 = very calm/low energy, 9 = very excited/high energy")
+    for anchor in MOOD_ANCHORS:
+        st.caption(anchor)
     with st.form(f"ratings_{playlist_label}"):
-        post_valence = st.slider("Mood valence after this playlist", 1, 9, 5)
-        post_arousal = st.slider("Mood arousal after this playlist", 1, 9, 5)
+        post_valence = st.slider(MOOD_LABELS["current_pleasant"], 1, 9, 5)
+        post_arousal = st.slider(MOOD_LABELS["current_energy"], 1, 9, 5)
         st.caption("Fit: 1 = not at all, 7 = extremely well")
         fit = st.slider("How well did the playlist fit your mood?", 1, 7, 4)
         st.caption("Satisfaction: 1 = very dissatisfied, 7 = very satisfied")
@@ -308,6 +530,7 @@ def render_playlist_ratings() -> None:
             st.session_state["stage"] = "break"
         else:
             st.session_state["stage"] = "final"
+        persist_checkpoint()
         st.rerun()
 
 
@@ -329,6 +552,7 @@ def render_break() -> None:
         )
     if submitted and remaining == 0:
         st.session_state["stage"] = "second_pre"
+        persist_checkpoint()
         st.rerun()
 
 
@@ -343,9 +567,11 @@ def render_second_pre() -> None:
     st.write(
         "When you feel ready, report how you feel right now."
     )
+    for anchor in MOOD_ANCHORS:
+        st.caption(anchor)
     with st.form("second_pre_mood"):
-        pre_valence = st.slider("Current valence right now", 1, 9, 5)
-        pre_arousal = st.slider("Current arousal right now", 1, 9, 5)
+        pre_valence = st.slider(MOOD_LABELS["current_pleasant"], 1, 9, 5)
+        pre_arousal = st.slider(MOOD_LABELS["current_energy"], 1, 9, 5)
         submitted = st.form_submit_button("Continue to Playlist B", type="primary")
     if submitted:
         st.session_state["second_pre"] = {
@@ -353,6 +579,7 @@ def render_second_pre() -> None:
             "arousal": pre_arousal,
         }
         st.session_state["stage"] = "playlist"
+        persist_checkpoint()
         st.rerun()
 
 
@@ -372,27 +599,68 @@ def _write_csv_atomic(path: Path, rows: list[dict], columns: list[str]) -> None:
     os.replace(temporary_path, path)
 
 
-def save_responses() -> None:
+def update_session_log(state: dict, end_time: str = "") -> None:
+    """Upsert this session's protocol row and keep structured recovery notes."""
+    path = OUTPUT_FILES["session_log"]
+    participant_id = state["participant_id"]
+    started_at = datetime.fromisoformat(state["started_at"])
+    transition_naturalness = {
+        position: state["responses"][condition]["transition_naturalness"]
+        for position, condition in zip(("A", "B"), state["condition_order"])
+        if "transition_naturalness" in state["responses"].get(condition, {})
+    }
+    notes = {
+        "last_completed_step": state.get("last_completed_step"),
+        "skipped_clips": state.get("skipped_clips", []),
+        "resume_count": int(state.get("resume_count", 0)),
+    }
+    if transition_naturalness:
+        notes["transition_naturalness"] = transition_naturalness
+    row = {
+        "participant_id": participant_id,
+        "session_date": started_at.date().isoformat(),
+        "researcher": "",
+        "start_time": state["started_at"],
+        "end_time": end_time,
+        "app_problems": "; ".join(state.get("app_problems", [])),
+        "notes": json.dumps(notes, sort_keys=True),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        existing = pd.read_csv(path, dtype=str).reindex(columns=SESSION_LOG_COLUMNS)
+        existing = existing.loc[existing["participant_id"] != participant_id]
+        frame = pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
+    else:
+        frame = pd.DataFrame([row], columns=SESSION_LOG_COLUMNS)
+    frame = frame.loc[:, SESSION_LOG_COLUMNS]
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".csv", dir=path.parent, delete=False
+    ) as temporary:
+        frame.to_csv(temporary, index=False)
+        temporary_path = Path(temporary.name)
+    os.replace(temporary_path, path)
+
+
+def save_responses(state: dict | None = None) -> None:
     """Write one completed participant to the four protocol CSV files."""
-    if st.session_state.get("saved"):
+    state = st.session_state if state is None else state
+    if state.get("saved"):
         return
-    participant_id = st.session_state["participant_id"]
-    initial = st.session_state["initial_current"]
-    target = st.session_state["target"]
-    second_pre = st.session_state["second_pre"]
-    responses = st.session_state["responses"]
-    assignment = st.session_state["assignment"]
-    background = st.session_state["background"]
+    participant_id = state["participant_id"]
+    initial = state["initial_current"]
+    target = state["target"]
+    second_pre = state["second_pre"]
+    responses = state["responses"]
+    assignment = state["assignment"]
+    background = state["background"]
     timestamp = datetime.now(timezone.utc)
-    session_date = timestamp.date().isoformat()
-    start_time = st.session_state["started_at"]
     participant_row = {
         "participant_id": participant_id,
         "order": assignment["order"],
         "playlist_A_condition": assignment["playlist_A_condition"],
         "playlist_B_condition": assignment["playlist_B_condition"],
-        "age_18_plus": st.session_state["age_18_plus"],
-        "consent": st.session_state["consent"],
+        "age_18_plus": state["age_18_plus"],
+        "consent": state["consent"],
         **background,
         "target_valence": target.valence,
         "target_arousal": target.arousal,
@@ -403,13 +671,13 @@ def save_responses() -> None:
             )
             < 2
         ),
-        "preferred_playlist": st.session_state["final_preference"],
-        "noticed_difference": st.session_state["noticed_difference"],
-        "comments": st.session_state["comment"],
+        "preferred_playlist": state["final_preference"],
+        "noticed_difference": state["noticed_difference"],
+        "comments": state["comment"],
     }
     ratings = []
     songs_played = []
-    for playlist_index, condition in enumerate(st.session_state["condition_order"]):
+    for playlist_index, condition in enumerate(state["condition_order"]):
         response = responses[condition]
         if playlist_index == 0:
             pre_valence = initial.valence
@@ -431,7 +699,7 @@ def save_responses() -> None:
                 "recognised_song": response["recognised_song"],
             }
         )
-        playlist = st.session_state["playlists"][condition]
+        playlist = state["playlists"][condition]
         for _, song in playlist.iterrows():
             songs_played.append(
                 {
@@ -449,24 +717,6 @@ def save_responses() -> None:
                     "gap_warning": bool(song["gap_warning"]),
                 }
             )
-    notes = json.dumps(
-        {
-            "transition_naturalness": {
-                position: responses[condition]["transition_naturalness"]
-                for position, condition in zip(("A", "B"), st.session_state["condition_order"])
-            }
-        },
-        sort_keys=True,
-    )
-    session_row = {
-        "participant_id": participant_id,
-        "session_date": session_date,
-        "researcher": "",
-        "start_time": start_time,
-        "end_time": timestamp.isoformat(),
-        "app_problems": "",
-        "notes": notes,
-    }
     _write_csv_atomic(
         OUTPUT_FILES["participants"],
         [participant_row],
@@ -495,15 +745,9 @@ def save_responses() -> None:
             "song_arousal", "distance", "gap_warning",
         ],
     )
-    _write_csv_atomic(
-        OUTPUT_FILES["session_log"],
-        [session_row],
-        [
-            "participant_id", "session_date", "researcher", "start_time",
-            "end_time", "app_problems", "notes",
-        ],
-    )
-    st.session_state["saved"] = True
+    update_session_log(state, end_time=timestamp.isoformat())
+    state["saved"] = True
+    delete_checkpoint(participant_id)
 
 
 def render_final() -> None:
@@ -542,10 +786,7 @@ def counterbalance_assignment(participant_id: str) -> pd.Series | None:
 def render_consent() -> None:
     """Collect the required age and consent decisions before study setup."""
     st.header("Eligibility and consent")
-    st.write(
-        "I am 18 years or older. I have read the information above and I agree "
-        "to take part."
-    )
+    st.markdown(CONSENT_TEXT)
     with st.form("eligibility_consent"):
         age_18_plus = st.radio(
             "I am 18 years or older.",
@@ -590,6 +831,21 @@ def eligibility_result(age_18_plus: str | None, consent: str | None) -> str:
 def render_start(songs: pd.DataFrame, retriever: SongRetriever) -> None:
     """Render participant setup and generate playlists once."""
     st.header("Participant setup")
+    resume_id = st.session_state.get("resume_prompt")
+    if resume_id:
+        st.warning(f"An unfinished session exists for participant {resume_id}.")
+        if st.button("Resume previous session", type="primary"):
+            try:
+                payload = read_checkpoint(resume_id)
+            except (OSError, json.JSONDecodeError, ValueError) as error:
+                st.error(f"Could not read the saved session: {error}")
+            else:
+                if payload is None:
+                    st.error("The saved session is no longer available.")
+                else:
+                    resume_checkpoint(payload)
+                    st.rerun()
+        return
     st.info(
         "For the best experience, please use headphones if possible and set the "
         "volume to a comfortable level."
@@ -645,12 +901,12 @@ def render_start(songs: pd.DataFrame, retriever: SongRetriever) -> None:
             "How many hours of music do you listen to on a typical day?",
             ["", "Less than 1", "1-2", "2-4", "More than 4"],
         )
-        st.caption("Valence: 1 = very negative, 9 = very positive")
-        st.caption("Arousal: 1 = very calm/low energy, 9 = very excited/high energy")
-        current_valence = st.slider("Current valence", 1, 9, 5)
-        current_arousal = st.slider("Current arousal", 1, 9, 5)
+        for anchor in MOOD_ANCHORS:
+            st.caption(anchor)
+        current_valence = st.slider(MOOD_LABELS["current_pleasant"], 1, 9, 5)
+        current_arousal = st.slider(MOOD_LABELS["current_energy"], 1, 9, 5)
         target = st.selectbox(
-            "How would you like to feel after listening?",
+            "Choose the feeling and energy you would like",
             targets,
             format_func=describe_target,
         )
@@ -666,6 +922,9 @@ def render_start(songs: pd.DataFrame, retriever: SongRetriever) -> None:
             f"Participant ID {participant_id.strip()} already has a completed session. "
             "Please use a different ID."
         )
+    elif submitted and checkpoint_path(participant_id.strip()).is_file():
+        st.session_state["resume_prompt"] = participant_id.strip()
+        st.rerun()
     elif submitted:
         background = {
             "age_group": age_group,
@@ -694,6 +953,7 @@ def render_start(songs: pd.DataFrame, retriever: SongRetriever) -> None:
         )
         st.session_state["started_at"] = datetime.now(timezone.utc).isoformat()
         st.session_state["stage"] = "playlist"
+        persist_checkpoint()
         st.rerun()
 
 

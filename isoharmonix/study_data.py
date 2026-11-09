@@ -68,17 +68,13 @@ def write_audio_manifest(root: Path, data_dir: Path, audio: AudioScan) -> Path:
 
 
 def load_prepared_audio(root: Path, data_dir: Path) -> AudioScan:
-    """Load a current manifest, refusing to trigger audio validation."""
+    """Load the researcher-prepared manifest without rescanning the dataset."""
     manifest_path = audio_manifest_path(root)
     try:
         manifest = json.loads(manifest_path.read_text())
-        expected_fingerprint = dataset_fingerprint(data_dir)
-        if (
-            manifest.get("fingerprint") != expected_fingerprint
-            or manifest.get("data_dir") != str(data_dir.resolve())
-        ):
+        if manifest.get("data_dir") != str(data_dir.resolve()):
             raise PreparedAudioError(
-                f"Study audio manifest is stale: {manifest_path}"
+                f"Study audio manifest is for a different DEAM directory: {manifest_path}"
             )
         return AudioScan(
             files_found=int(manifest["files_found"]),

@@ -23,7 +23,7 @@ each item is the column name in the data files, so please keep them the same.
 
 > **IsoHarmonix: music and everyday mood**
 >
-> We are students in the AI for Healthcare course at Cornell University. We are testing
+> We are students in the AI for Healthcare course at Cornell Tech. We are testing
 > two ways of ordering songs in a playlist, to see how they affect everyday mood.
 >
 > **What you will do.** You will listen to two short playlists (about 4 minutes each)
@@ -42,8 +42,6 @@ each item is the column name in the data files, so please keep them the same.
 > **Your choice.** Taking part is voluntary. You can skip any question or stop at any
 > time, with no problem at all.
 >
-> **Questions?** Contact the team: [team email].
-
 | # | Item | Answer | variable_name |
 |---|---|---|---|
 | 0.1 | I am 18 years or older. | Yes / No | `age_18_plus` |
